@@ -1,8 +1,11 @@
+import { Prompt } from '@dexaai/dexter';
 import { json } from '@remix-run/node';
 import type { LoaderFunctionArgs, MetaFunction } from '@remix-run/node';
 import { Form, useLoaderData } from '@remix-run/react';
 import { z } from 'zod';
 import { zx } from 'zodix';
+import { summarizeSearchResults } from '~/services/openai';
+import { SearchResult, searchGoogle } from '~/services/serpapi';
 
 export const meta: MetaFunction = () => {
   return [{ title: 'Dexa Coding Interview' }];
@@ -12,9 +15,27 @@ export async function loader(args: LoaderFunctionArgs) {
   const { q } = zx.parseQuery(args.request, {
     q: z.string().optional(),
   });
-  const searchResults: unknown[] = [];
-  const summary = q?.length ? `TODO: Summary of search results for "${q}"` : '';
+
+  const searchResults: SearchResult[] = q?.length ? await searchGoogle(q) : [];
+  const summary: Prompt.Msg|null = q?.length ? await summarizeSearchResults(q, searchResults) : null;
   return json({ q, searchResults, summary });
+}
+
+function SearchResultComponent({title, link, snippet}: SearchResult) {
+  return (
+    <div>
+      <h3>{title}</h3>
+      <a href={link}>{link}</a>
+      <p>{snippet}</p>
+    </div>
+  );
+}
+
+function generateResults(searchResults: SearchResult[]) {
+  if (searchResults) {
+    return searchResults.map((result, idx) => <SearchResultComponent {...result} key={idx} />);
+  }
+  return <p>No search results found.</p>;
 }
 
 export default function Index() {
@@ -34,7 +55,8 @@ export default function Index() {
         />
         <button type="submit">Search</button>
       </Form>
-      {summary ? <p>{`Summary: ${summary}`}</p> : null}
+      {summary ? <p>{`Summary: ${summary?.content}`}</p> : null}
+      {generateResults(searchResults)}
     </div>
   );
 }
